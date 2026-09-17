@@ -1,0 +1,30 @@
+{
+  "version": "1.2.0-level10",
+  "agents": [
+    {
+      "id": "general",
+      "name": "ผู้ช่วยทั่วไป Level 10",
+      "personality": "agents/personalities/general.md",
+      "skills": ["agents/skills/reasoning.md"],
+      "level": 10
+    },
+    {
+      "id": "coder",
+      "name": "นักพัฒนา Level 10",
+      "personality": "agents/personalities/coder.md",
+      "skills": [
+        "agents/skills/coding.md",
+        "agents/skills/deployment.md",
+        "agents/skills/gitlab.md"
+      ],
+      "level": 10
+    },
+    {
+      "id": "researcher",
+      "name": "นักวิจัย Level 10",
+      "personality": "agents/personalities/researcher.md",
+      "skills": ["agents/skills/research.md", "agents/skills/reasoning.md"],
+      "level": 10
+    }
+  ]
+}

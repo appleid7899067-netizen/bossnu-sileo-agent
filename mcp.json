@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "github": {
+      "type": "http",
+      "url": "https://panuss09.vercel.app/api/github-mcp"
+    }
+  }
+}
