@@ -7,6 +7,8 @@ import {
 } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
+import { diagnoseFailure, mutationExpected, selectCapabilities, verificationEvidence } from "@/lib/agent-loop";
+import { webCheck } from "@/lib/web-check";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,104 +24,111 @@ const AGENTS = {
 
 function chooseAgent(text: string) {
   const t = text.toLowerCase();
-  if (/(โค้ด|code|bug|error|deploy|vercel|railway|github|gitlab|api|โปรเจกต์)/i.test(t)) {
-    return "coder";
-  }
-  if (/(ค้นหา|วิจัย|ข้อมูล|ล่าสุด|compare|เปรียบเทียบ|research)/i.test(t)) {
-    return "researcher";
-  }
+  if (/(โค้ด|code|bug|error|deploy|vercel|railway|github|gitlab|api|โปรเจกต์|แก้|สร้าง|ลบ)/i.test(t)) return "coder";
+  if (/(ค้นหา|วิจัย|ข้อมูล|ล่าสุด|compare|เปรียบเทียบ|research)/i.test(t)) return "researcher";
   return "general";
+}
+
+function extractUrls(text: string) {
+  return text.match(/https:\/\/[^\s)\]}>,]+/gi) ?? [];
 }
 
 export async function POST(req: Request) {
   const token = process.env.PUTER_AUTH_TOKEN;
-  if (!token) {
-    return Response.json({ error: "PUTER_AUTH_TOKEN is not configured" }, { status: 503 });
-  }
+  if (!token) return Response.json({ error: "PUTER_AUTH_TOKEN is not configured" }, { status: 503 });
 
   try {
     const {
       messages,
       system,
       model,
-    }: {
-      messages: UIMessage[];
-      system?: string;
-      model?: string;
-    } = await req.json();
+    }: { messages: UIMessage[]; system?: string; model?: string } = await req.json();
 
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
-    const userText =
-      lastUser?.parts
-        ?.filter((p) => p.type === "text")
-        .map((p) => p.text)
-        .join(" ") || "";
-
+    const userText = lastUser?.parts?.filter((p) => p.type === "text").map((p) => p.text).join(" ") || "";
     const agentId = chooseAgent(userText);
     const agentName = AGENTS[agentId];
+    const capabilities = selectCapabilities(userText);
+    const needsMutation = mutationExpected(userText);
+    const targetUrls = extractUrls(userText);
 
-    const puter = createOpenAI({
-      apiKey: token,
-      baseURL: PUTER_BASE,
-    });
+    const puter = createOpenAI({ apiKey: token, baseURL: PUTER_BASE });
 
     const result = streamText({
       model: puter(model || "gpt-5.4-nano"),
-      system:
-        system ||
-        `คุณคือ BossnuSilelo Agent Workspace
-Agent ที่เลือก: ${agentName} (${agentId})
+      system: system || `คุณคือ BossnuSilelo Agent Workspace
+Agent: ${agentName} (${agentId})
+Tool capabilities selected: ${capabilities.join(", ")}
 
-หลักการทำงาน:
-1. รับ "เป้าหมาย" ก่อน ไม่บังคับให้ผู้ใช้เลือกเครื่องมือเอง
-2. แตกงานเป็น PLAN → EXECUTE → VERIFY
-3. ใช้เครื่องมือเมื่อจำเป็นจริง
-4. ก่อนบอกว่าเสร็จ ต้องตรวจผลลัพธ์หรือระบุสิ่งที่ตรวจไม่ได้อย่างชัดเจน
-5. ถ้าเป็นงานแก้โค้ด ให้บอกสั้น ๆ ว่ากำลังตรวจอะไรและผลเป็นอย่างไร
-6. ห้ามเปิดเผย secret, token หรือค่า environment จริง
-7. ตอบภาษาไทยเป็นหลัก`,
+คุณใช้ protocol แบบ Bosses:
+PLAN → SELECT → ACT → OBSERVE → REFINE → VERIFY
+
+กติกาสำคัญ:
+1. ผู้ใช้บอกเป้าหมาย บอสวางแผนและเลือกเครื่องมือเอง
+2. งานแก้/สร้าง/ลบ/deploy ถือเป็น mutation ต้องมีหลักฐานตรวจสอบก่อนประกาศสำเร็จ
+3. หลัง tool ทำงาน ให้ดูผลจริงก่อนตัดสินใจขั้นต่อไป
+4. ถ้า tool ล้มเหลว ให้วิเคราะห์ error จริง, เปลี่ยนวิธีหรือแก้สาเหตุ แล้วลองใหม่
+5. ห้ามวนเรียก tool เดิมแบบเดิมโดยไม่มีข้อมูลใหม่
+6. ถ้ามี URL ของเว็บและงานเกี่ยวกับ deploy/health/เว็บ ต้องใช้ web_check ตรวจ URL จริง
+7. verify_result เป็น gate สรุปผล ไม่ใช่สิ่งที่ใช้แทนการตรวจจริง
+8. ห้ามอ้างว่าแก้ GitHub/ไฟล์/deploy สำเร็จ หากยังไม่มี external tool ที่ทำ action นั้นจริง
+9. ห้ามเปิดเผย secret/token/environment value
+10. ตอบภาษาไทยเป็นหลัก`,
       messages: await convertToModelMessages(messages),
       tools: {
         create_plan: tool({
-          description:
-            "แตกเป้าหมายของผู้ใช้เป็นแผนงานที่ตรวจสอบได้ ก่อนลงมือทำ เหมาะกับงานหลายขั้นตอน",
+          description: "PLAN: แตกเป้าหมายเป็นขั้นตอนที่ตรวจสอบได้",
           inputSchema: z.object({
-            goal: z.string().describe("เป้าหมายของผู้ใช้"),
-            steps: z.array(z.string()).min(1).max(10).describe("ขั้นตอนที่ต้องทำตามลำดับ"),
+            goal: z.string(),
+            steps: z.array(z.string()).min(1).max(10),
           }),
           execute: async ({ goal, steps }) => ({
             status: "planned",
             goal,
             agent: agentId,
-            steps: steps.map((name, index) => ({
-              index: index + 1,
-              name,
-              status: "pending",
-            })),
+            capabilities,
+            steps: steps.map((name, index) => ({ index: index + 1, name, status: "pending" })),
           }),
         }),
+        web_check: tool({
+          description: "VERIFY: ตรวจเว็บ HTTPS จริงหลัง deploy หรือเมื่อผู้ใช้ให้ URL มา",
+          inputSchema: z.object({ url: z.string().url() }),
+          execute: async ({ url }) => {
+            try {
+              const result = await webCheck(url);
+              return { ...result, evidence: verificationEvidence("web_check", result) };
+            } catch (error) {
+              return {
+                ok: false,
+                url,
+                error: String(error instanceof Error ? error.message : error),
+                diagnosis: diagnoseFailure(error, "web_check"),
+              };
+            }
+          },
+        }),
         verify_result: tool({
-          description:
-            "ตรวจความครบถ้วนของงานก่อนรายงานว่าเสร็จ ใช้หลังจากการทำงานสำคัญ",
+          description: "VERIFY GATE: สรุปหลักฐานจากการทำงานก่อนประกาศเสร็จ",
           inputSchema: z.object({
-            task: z.string().describe("งานที่ต้องตรวจ"),
-            checks: z.array(z.string()).min(1).max(10).describe("รายการตรวจ"),
-            passed: z.array(z.boolean()).min(1).describe("ผลตรวจแต่ละรายการ"),
+            task: z.string(),
+            checks: z.array(z.string()).min(1).max(10),
+            passed: z.array(z.boolean()).min(1),
+            evidence: z.array(z.string()).optional(),
           }),
-          execute: async ({ task, checks, passed }) => {
-            const allPassed = checks.length === passed.length && passed.every(Boolean);
+          execute: async ({ task, checks, passed, evidence = [] }) => {
+            const allPassed = checks.length === passed.length && passed.length > 0 && passed.every(Boolean);
             return {
               status: allPassed ? "verified" : "needs_attention",
+              verified: allPassed,
               task,
-              checks: checks.map((name, i) => ({
-                name,
-                passed: Boolean(passed[i]),
-              })),
+              checks: checks.map((name, i) => ({ name, passed: Boolean(passed[i]) })),
+              evidence,
+              note: allPassed ? "มีหลักฐาน verification แล้ว" : "ยังไม่ควรประกาศว่างานเสร็จ",
             };
           },
         }),
       },
-      stopWhen: stepCountIs(6),
+      stopWhen: stepCountIs(8),
     });
 
     return result.toUIMessageStreamResponse();
@@ -138,6 +147,8 @@ export async function GET() {
     provider: "puter-openai-compatible",
     configured: Boolean(process.env.PUTER_AUTH_TOKEN),
     agents: AGENTS,
-    orchestration: ["PLAN", "EXECUTE", "VERIFY"],
+    protocol: ["PLAN", "SELECT", "ACT", "OBSERVE", "REFINE", "VERIFY"],
+    mutationGate: true,
+    webVerification: true,
   });
 }
