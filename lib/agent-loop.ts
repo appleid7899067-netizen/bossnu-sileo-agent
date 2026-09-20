@@ -34,3 +34,13 @@ export function verificationEvidence(name: string, value: unknown) {
   if (r.status === "completed" && r.conclusion === "success") return `${name} workflow completed successfully`;
   return null;
 }
+
+export function selectCapabilities(prompt: string) {
+  const t = prompt.toLowerCase();
+  const capabilities: string[] = ["chat"];
+  if (/(github|gitlab|repo|ไฟล์|โค้ด|code|แก้|สร้าง|ลบ|commit)/i.test(t)) capabilities.push("github");
+  if (/(deploy|ดีพลอย|vercel|railway|netlify|เว็บ|url|502|503)/i.test(t)) capabilities.push("web_check");
+  if (/(ค้นหา|วิจัย|ข้อมูล|ล่าสุด|research|search)/i.test(t)) capabilities.push("research");
+  if (/(test|verify|ตรวจ|เช็ก|build|ci|ผ่าน|health|status)/i.test(t)) capabilities.push("verification");
+  return [...new Set(capabilities)];
+}
