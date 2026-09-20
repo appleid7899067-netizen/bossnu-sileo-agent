@@ -267,3 +267,23 @@ textarea {
     max-width: 90%;
   }
 }
+
+.boss-agentbar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  color: #71717a;
+  font-size: 10px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 12px;
+  background: rgba(255,255,255,.025);
+}
+.boss-agentpill {
+  color: #ddd6fe;
+  font-weight: 700;
+}
+.boss-ready {
+  margin-left: auto;
+  color: #34d399;
+}
