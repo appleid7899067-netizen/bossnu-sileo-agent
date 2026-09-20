@@ -12,7 +12,11 @@
   "dependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "next": "15.5.24"
+    "next": "15.5.24",
+    "@assistant-ui/ai-sdk": "latest",
+    "@assistant-ui/react": "latest",
+    "@ai-sdk/openai": "latest",
+    "ai": "latest"
   },
   "devDependencies": {
     "typescript": "^5",
