@@ -15,6 +15,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
 const PUTER_BASE = "https://api.puter.com/puterai/openai/v1";
 
 const AGENTS = {
@@ -35,8 +36,9 @@ function extractUrls(text: string) {
 }
 
 export async function POST(req: Request) {
-  const token = process.env.PUTER_AUTH_TOKEN;
-  if (!token) return Response.json({ error: "PUTER_AUTH_TOKEN is not configured" }, { status: 503 });
+  const openRouterKey = process.env.OPENROUTER_API_KEY;
+  const puterToken = process.env.PUTER_AUTH_TOKEN;
+  if (!openRouterKey && !puterToken) return Response.json({ error: "OPENROUTER_API_KEY is not configured" }, { status: 503 });
 
   try {
     const {
@@ -53,10 +55,12 @@ export async function POST(req: Request) {
     const needsMutation = mutationExpected(userText);
     const targetUrls = extractUrls(userText);
 
-    const puter = createOpenAI({ apiKey: token, baseURL: PUTER_BASE });
+    const provider = openRouterKey
+      ? createOpenAI({ apiKey: openRouterKey, baseURL: OPENROUTER_BASE })
+      : createOpenAI({ apiKey: puterToken!, baseURL: PUTER_BASE });
 
     const result = streamText({
-      model: puter(model || "gpt-5.4-nano"),
+      model: provider(model || process.env.OPENROUTER_MODEL || "openrouter/free"),
       system: system || `คุณคือ BossnuSilelo Agent Workspace
 Agent: ${agentName} (${agentId})
 Tool capabilities selected: ${capabilities.join(", ")}
@@ -214,8 +218,10 @@ export async function GET() {
   return Response.json({
     ok: true,
     endpoint: "/api/chat",
-    provider: "puter-openai-compatible",
-    configured: Boolean(process.env.PUTER_AUTH_TOKEN),
+    provider: process.env.OPENROUTER_API_KEY ? "openrouter" : "puter-openai-compatible",
+    configured: Boolean(process.env.OPENROUTER_API_KEY || process.env.PUTER_AUTH_TOKEN),
+    puterLoginRequired: false,
+    openRouterConfigured: Boolean(process.env.OPENROUTER_API_KEY),
     agents: AGENTS,
     protocol: ["PLAN", "SELECT", "ACT", "OBSERVE", "REFINE", "VERIFY"],
     mutationGate: true,
