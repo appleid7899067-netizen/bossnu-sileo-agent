@@ -5,11 +5,14 @@ import {
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
-} from "@assistant-ui/react";\n\nimport { AgentStatus } from "./agent-status";
+} from "@assistant-ui/react";
+
+import { AgentStatus } from "./agent-status";
 
 export function BossThread() {
   return (
-    <ThreadPrimitive.Root className="boss-thread">\n      <AgentStatus />
+    <ThreadPrimitive.Root className="boss-thread">
+      <AgentStatus />
       <ThreadPrimitive.Viewport
         className="boss-viewport"
         turnAnchor="top"
