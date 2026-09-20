@@ -16,7 +16,9 @@
     "@assistant-ui/ai-sdk": "latest",
     "@assistant-ui/react": "latest",
     "@ai-sdk/openai": "latest",
-    "ai": "latest"
+    "ai": "latest",
+    "@ai-sdk/react": "latest",
+    "zod": "latest"
   },
   "devDependencies": {
     "typescript": "^5",
